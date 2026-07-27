@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>UL Cabin Crew FDP Calculator</title>
+
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#090d13">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Calculate maximum allowable Flight Duty Period for cabin crew, including standby and in-flight relief, per SriLankan Airlines FOM Part A Chapter 8.">
+
+<!-- iOS PWA support -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="UL FDP Calc">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+<!-- Android / other -->
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./favicon-16.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#090d13;
+    --panel:#121822;
+    --panel-2:#171f2c;
+    --line:#243040;
+    --text:#e8edf4;
+    --dim:#8ea0b5;
+    --dimmer:#5c6c80;
+    --cyan:#4fd1e0;
+    --green:#3ddc97;
+    --amber:#f5a623;
+    --red:#ff5c66;
+    --mono:'JetBrains Mono', monospace;
+    --display:'Space Grotesk', sans-serif;
+    --body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    overflow-x:hidden;
+    background:
+      radial-gradient(1200px 500px at 15% -10%, rgba(79,209,224,0.08), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(61,220,151,0.05), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--body);
+    line-height:1.5;
+    padding:0 0 calc(60px + env(safe-area-inset-bottom));
+    touch-action:manipulation;
+  }
+  a{color:var(--cyan);}
+
+  .wrap{
+    max-width:1180px;margin:0 auto;
+    padding:calc(28px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  }
+  @media(min-width:640px){ .wrap{padding-top:36px;padding-left:24px;padding-right:24px;} }
+
+  header.top{
+    position:sticky; top:0; z-index:40;
+    display:flex;flex-direction:column;align-items:center;text-align:center;
+    gap:8px;
+    width:100vw;
+    margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);
+    margin-bottom:32px;
+    padding:calc(16px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 18px max(16px, env(safe-area-inset-left));
+    background:rgba(9,13,19,0.92);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--cyan);
+  }
+  h1{
+    font-family:var(--display);font-weight:700;font-size:clamp(22px,4vw,36px);
+    margin:0;letter-spacing:-0.01em;
+  }
+  .tagline{color:var(--dim);font-size:14px;max-width:440px;text-align:center;}
+
+  .headerActions{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:2px;}
+
+  #installBtn{
+    display:none;align-items:center;gap:7px;
+    font-family:var(--mono);font-size:12px;letter-spacing:.04em;
+    background:var(--cyan);color:#06171b;border:none;border-radius:99px;
+    padding:9px 16px;cursor:pointer;font-weight:700;
+    min-height:38px;
+  }
+  #installBtn:active{transform:scale(0.97);}
+  #installBtn.show{display:inline-flex;}
+  #iosHint{
+    display:none;font-size:11.5px;color:var(--dim);max-width:280px;line-height:1.5;text-align:center;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;
+  }
+  #iosHint.show{display:block;}
+
+  .grid{display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;}
+  @media(max-width:960px){ .grid{grid-template-columns:1fr;} }
+
+  .card{
+    background:linear-gradient(180deg, var(--panel), var(--panel));
+    border:1px solid var(--line);border-radius:16px;padding:20px 18px 24px;
+  }
+  @media(min-width:640px){ .card{padding:26px 26px 28px;} }
+  .card h2{
+    font-family:var(--display);font-size:15px;letter-spacing:.02em;
+    margin:0 0 20px;color:var(--text);
+    display:flex;align-items:center;gap:10px;
+  }
+  .card h2 .num{
+    font-family:var(--mono);color:var(--cyan);font-size:12px;
+    border:1px solid var(--line);border-radius:6px;padding:2px 7px;
+  }
+
+  fieldset{border:none;margin:0 0 22px;padding:0;}
+  legend{
+    font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);
+    margin-bottom:10px;font-weight:600;
+  }
+  label.field{display:block;margin-bottom:16px;}
+  label.field .lbl{
+    display:block;font-size:13px;color:var(--dim);margin-bottom:7px;
+  }
+  input:focus, select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(79,209,224,0.15);}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:520px){ .row2{grid-template-columns:1fr;} }
+
+  .radiogroup{display:flex;gap:10px;flex-wrap:wrap;}
+  .radiogroup label{
+    flex:1;min-width:130px;display:flex;align-items:center;gap:8px;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;
+    padding:13px 12px;font-size:13.5px;cursor:pointer;transition:.15s;
+    min-height:46px;
+  }
+  .radiogroup label:has(input:checked){
+    border-color:var(--cyan);background:rgba(79,209,224,0.08);
+  }
+  .radiogroup input{accent-color:var(--cyan);width:18px;height:18px;flex-shrink:0;}
+
+  .checkline{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--dim);
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:13px;min-height:46px;}
+  .checkline input{margin-top:2px;accent-color:var(--cyan);width:18px;height:18px;flex-shrink:0;}
+  .checkline b{color:var(--text);}
+
+  input[type=time], input[type=number], select{
+    width:100%;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--text);font-family:var(--mono);font-size:16px;
+    padding:13px 12px;border-radius:9px;transition:border-color .15s;
+    min-height:46px;
+  }
+
+  @media(max-width:480px){
+    .grid{gap:16px;}
+    header.top{margin-bottom:22px;padding-bottom:14px;}
+    .tagline{font-size:13.5px;}
+    .rline .v.big{font-size:19px;}
+  }
+
+  .hint{font-size:12px;color:var(--dimmer);margin-top:6px;line-height:1.5;}
+  .conditional{
+    max-height:0;overflow:hidden;opacity:0;transition:max-height .25s ease, opacity .2s ease;
+  }
+  .conditional.open{max-height:400px;opacity:1;margin-top:10px;}
+
+  /* --- Clock / signature element --- */
+  .clockwrap{display:flex;justify-content:center;padding:6px 0 4px;}
+  svg#timeline{width:100%;height:auto;overflow:visible;}
+  .tl-tick-label{font-family:var(--mono);font-size:10px;fill:var(--dimmer);}
+  .tl-seg-label{font-family:var(--mono);font-size:10.5px;font-weight:700;fill:#06171b;}
+  .tl-marker-label{font-family:var(--mono);font-size:11px;font-weight:700;fill:var(--text);}
+  .tl-marker-sub{font-family:var(--mono);font-size:9px;fill:var(--dim);letter-spacing:.04em;}
+  .tl-placeholder{font-family:var(--mono);font-size:12px;fill:var(--dim);}
+  .timelineLegend{
+    display:flex;flex-wrap:wrap;gap:14px;justify-content:center;
+    margin-top:2px;padding-bottom:2px;
+  }
+  .timelineLegend .lg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);}
+  .timelineLegend .sw{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+
+  /* --- Readout --- */
+  .readout{margin-top:22px;border-top:1px solid var(--line);padding-top:20px;}
+  .rline{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:9px 0;border-bottom:1px dashed var(--line);
+  }
+  .rline:last-of-type{border-bottom:none;}
+  .rline .k{font-size:12.5px;color:var(--dim);}
+  .rline .v{font-family:var(--mono);font-size:15px;font-weight:500;}
+  .rline .v.big{font-size:22px;font-weight:700;color:var(--cyan);}
+
+  .status{
+    margin-top:18px;border-radius:11px;padding:16px 18px;
+    display:flex;align-items:center;gap:12px;font-size:14px;
+    border:1px solid var(--line);
+  }
+  .status .sw{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .status.ok{background:rgba(61,220,151,0.09);border-color:rgba(61,220,151,0.35);}
+  .status.ok .sw{background:var(--green);box-shadow:0 0 10px var(--green);}
+  .status.tight{background:rgba(245,166,35,0.09);border-color:rgba(245,166,35,0.35);}
+  .status.tight .sw{background:var(--amber);box-shadow:0 0 10px var(--amber);}
+  .status.bad{background:rgba(255,92,102,0.09);border-color:rgba(255,92,102,0.35);}
+  .status.bad .sw{background:var(--red);box-shadow:0 0 10px var(--red);}
+  .status .msg b{font-family:var(--mono);}
+
+  .note{
+    font-size:12px;color:var(--dim);background:var(--panel-2);border:1px solid var(--line);
+    border-radius:9px;padding:11px 13px;margin-top:14px;line-height:1.55;
+  }
+  .note b{color:var(--text);}
+
+  .discretion{
+    margin-top:20px;padding:16px 18px;border:1px dashed var(--line);border-radius:11px;
+    font-size:12.5px;color:var(--dim);
+  }
+  .discretion .dtitle{font-family:var(--mono);color:var(--amber);letter-spacing:.05em;
+    text-transform:uppercase;font-size:11px;margin-bottom:8px;}
+
+  footer{
+    max-width:1180px;margin:44px auto 0;padding:22px 24px 0;border-top:1px solid var(--line);
+    color:var(--dimmer);font-size:11.5px;line-height:1.7;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">FDP LINE</div>
+    <h1>UL Cabin Crew FDP Calculator</h1>
+    <div class="tagline">Enter your report time to see the maximum Flight Duty Period you can legally be rostered.</div>
+    <div class="headerActions">
+      <button id="installBtn" type="button">⬇ Install app</button>
+      <div id="iosHint">On iPhone/iPad: tap <b>Share</b> in Safari, then <b>Add to Home Screen</b> to install.</div>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- INPUT CARD -->
+    <div class="card">
+      <h2><span class="num">IN</span>Duty details</h2>
+
+      <fieldset>
+        <legend>Acclimatisation</legend>
+        <div class="radiogroup" id="acclimGroup">
+          <label><input type="radio" name="acclim" value="yes" checked> Acclimatised</label>
+          <label><input type="radio" name="acclim" value="no"> Not acclimatised</label>
+        </div>
+
+        <div class="conditional" id="restBox">
+          <label class="field" style="margin-top:14px;margin-bottom:0;">
+            <span class="lbl">Length of preceding rest</span>
+            <select id="precedingRest">
+              <option value="upto18orover30">Up to 18 or Over 30 Hours</option>
+              <option value="between18and30">Between 18 and 30 Hours</option>
+            </select>
+          </label>
+          <div class="hint">Table B applies. "Up to 18 or over 30" uses the higher-FDP row; "Between 18 and 30" uses the lower row (the circadian dip band).</div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Standby duty</legend>
+        <div class="radiogroup" id="sbyGroup">
+          <label><input type="radio" name="sby" value="no" checked> Not on standby</label>
+          <label><input type="radio" name="sby" value="yes"> Called out from standby</label>
+        </div>
+
+        <div class="conditional" id="sbyBox">
+          <label class="field" style="margin-top:14px;">
+            <span class="lbl">Standby period block</span>
+            <select id="sbyBlock">
+              <option value="360">06:00 – 18:00</option>
+              <option value="720">12:00 – 00:00</option>
+              <option value="1080">18:00 – 06:00</option>
+              <option value="0">00:00 – 12:00</option>
+            </select>
+          </label>
+          <div class="hint">Standby is capped at 12 hours in all cases. The report time below is treated as the moment of call-out from standby.</div>
+
+          <label class="checkline" style="margin-top:12px;">
+            <input type="checkbox" id="sbyException">
+            <span>Standby held at <b>home or company accommodation between 22:00–08:00</b>, with <b>2 hours' notice or less</b> of report time given</span>
+          </label>
+          <div class="hint">If checked, the standby start time is disregarded and the allowable FDP is based purely on the report (call-out) time band, per FOM 8.4.8.</div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Reporting time</legend>
+        <label class="field" style="margin-bottom:0;">
+          <span class="lbl">Report time (local, 24hr)</span>
+          <input type="time" id="reportTime" value="08:00">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Sectors</legend>
+        <label class="field" style="margin-bottom:6px;">
+          <span class="lbl">Number of sectors in this duty</span>
+          <input type="number" id="sectors" min="1" max="8" value="1">
+        </label>
+        <div class="hint">8 or more sectors uses the final column of the table.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Route variation</legend>
+        <label class="checkline">
+          <input type="checkbox" id="annexOverride">
+          <span><b>CMB ↔ LHR / CDG / FRA layover pattern</b> — Annex B.1.1(a) special scheme (report 22:00–05:59). Sets max FDP to 13:00 directly, overriding the table.</span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Extension of FDP</legend>
+        <div class="radiogroup" id="extGroup">
+          <label><input type="radio" name="ext" value="none" checked> None</label>
+          <label><input type="radio" name="ext" value="relief"> In-flight relief</label>
+        </div>
+
+        <div class="conditional" id="reliefBox">
+          <div class="row2" style="margin-top:14px;">
+            <label class="field" style="margin-bottom:0;">
+              <span class="lbl">Total in-flight rest (hours)</span>
+              <input type="number" id="reliefHours" min="0" max="12" step="0.25" value="4">
+            </label>
+            <label class="field" style="margin-bottom:0;">
+              <span class="lbl">Rest facility</span>
+              <select id="reliefType">
+                <option value="bunk">Bunk (screened)</option>
+                <option value="seat">Seat (reclining)</option>
+              </select>
+            </label>
+          </div>
+          <div class="hint">Needs ≥3h total (need not be consecutive). Bunk: +½ of rest, capped at 19:00 total FDP for cabin crew. Seat: +⅓ of rest, capped at 16:00.</div>
+        </div>
+      </fieldset>
+
+      <fieldset style="margin-bottom:0;">
+        <legend>Check against a planned duty (optional)</legend>
+        <label class="checkline" style="margin-bottom:14px;">
+          <input type="checkbox" id="homeBase">
+          <span>Departing from <b>home base</b> (affects discretion allowance shown below)</span>
+        </label>
+        <label class="field" style="margin-bottom:0;">
+          <span class="lbl">Planned sign-off time (optional)</span>
+          <input type="time" id="plannedEnd">
+        </label>
+        <div class="hint">If filled in, the tool checks your actual rostered duty against the calculated allowance.</div>
+      </fieldset>
+    </div>
+
+    <!-- OUTPUT CARD -->
+    <div class="card">
+      <h2><span class="num">OUT</span>Allowable FDP</h2>
+
+      <div class="clockwrap">
+        <svg id="timeline" viewBox="0 0 760 168"></svg>
+      </div>
+      <div class="timelineLegend" id="timelineLegend"></div>
+
+      <div class="readout">
+        <div class="rline"><span class="k">Time band</span><span class="v" id="outBand">—</span></div>
+        <div class="rline" id="sbyRow1" style="display:none;"><span class="k">Standby elapsed at call-out</span><span class="v" id="outSbyElapsed">—</span></div>
+        <div class="rline" id="sbyRow2" style="display:none;"><span class="k">Standby case applied</span><span class="v" id="outSbyCase">—</span></div>
+        <div class="rline"><span class="k">Base max FDP (table)</span><span class="v" id="outBase">—</span></div>
+        <div class="rline" id="sbyRow3" style="display:none;"><span class="k">FDP after standby erosion</span><span class="v" id="outSbyErosion">—</span></div>
+        <div class="rline"><span class="k">Extension applied</span><span class="v" id="outExt">—</span></div>
+        <div class="rline"><span class="k">Allowable FDP (from call-out)</span><span class="v big" id="outAllowable">—</span></div>
+        <div class="rline" id="sbyRow4" style="display:none;"><span class="k">Total duty period (SBY start → sign-off)</span><span class="v" id="outSbyTotal">—</span></div>
+        <div class="rline"><span class="k">Latest legal sign-off</span><span class="v" id="outSignoff">—</span></div>
+      </div>
+
+      <div class="status ok" id="statusBox" style="display:none;">
+        <span class="sw"></span>
+        <span class="msg" id="statusMsg"></span>
+      </div>
+
+      <div class="note" id="ruleNote"></div>
+
+      <div class="discretion">
+        <div class="dtitle">Commander's discretion — reference only</div>
+        <span id="discretionText"></span> Not included in the figures above; requires a Discretion Report (FOM 8.6.1 / 8.4.14) and is for unforeseen circumstances, not planning.
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Based on SriLankan Airlines FOM Part A, Chapter 8 (Flight Time, Flight Duty Periods, Duty Periods and Rest Periods for Fatigue Management) and Annex A/B, cabin crew provisions. This tool is a planning aid for quick reference only — it does not replace the FOM, the published roster, or sign-off from Crew Scheduling. Always verify against the current controlled revision of the FOM before relying on any figure shown here.
+  </footer>
+</div>
+
+<script>
+(function(){
+  // ---------- Regulatory tables (minutes), FLIGHT CREW base values ----------
+  // Table A - acclimatised, by local start band, sectors 1..8+ (index 0..7)
+  const tableA = {
+    '0600-0759': [780,735,690,645,600,570,540,540],
+    '0800-1259': [840,795,750,705,660,630,600,570],
+    '1300-1759': [780,735,690,645,600,570,540,540],
+    '1800-2159': [720,675,630,585,540,540,540,540],
+    '2200-0559': [660,615,570,540,540,540,540,540],
+  };
+  // Table B - not acclimatised, by preceding rest band, sectors 1..7+ (index 0..6)
+  const tableB = {
+    'upto18orover30': [780,735,690,645,600,555,540],
+    'between18and30': [690,660,630,585,540,540,540],
+  };
+  const CABIN_ADD = 60; // +1 hour for cabin crew
+
+  const bandRanges = [
+    {key:'0600-0759', start:360, end:479, label:'06:00–07:59'},
+    {key:'0800-1259', start:480, end:779, label:'08:00–12:59'},
+    {key:'1300-1759', start:780, end:1079, label:'13:00–17:59'},
+    {key:'1800-2159', start:1080, end:1319, label:'18:00–21:59'},
+    {key:'2200-0559', start:1320, end:1439, label:'22:00–05:59', wraps:true},
+  ];
+
+  function timeToMin(str){
+    if(!str) return null;
+    const [h,m] = str.split(':').map(Number);
+    return h*60+m;
+  }
+  function minToTime(mins){
+    mins = ((mins % 1440)+1440)%1440;
+    const h = Math.floor(mins/60), m = mins%60;
+    return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+  }
+  function minToHM(mins){
+    const sign = mins<0?'-':'';
+    mins = Math.abs(Math.round(mins));
+    const h = Math.floor(mins/60), m = mins%60;
+    return sign+String(h)+':'+String(m).padStart(2,'0');
+  }
+
+  function getBand(reportMin){
+    for(const b of bandRanges){
+      if(b.wraps){
+        if(reportMin>=1320 || reportMin<=359) return b;
+      } else if(reportMin>=b.start && reportMin<=b.end){
+        return b;
+      }
+    }
+    return bandRanges[4];
+  }
+
+  // ---------- UI wiring ----------
+  const el = id => document.getElementById(id);
+  const reportTime = el('reportTime');
+  const sectorsInput = el('sectors');
+  const precedingRest = el('precedingRest');
+  const restBox = el('restBox');
+  const reliefBox = el('reliefBox');
+  const annexOverride = el('annexOverride');
+  const homeBase = el('homeBase');
+  const plannedEnd = el('plannedEnd');
+  const sbyBox = el('sbyBox');
+  const sbyBlock = el('sbyBlock');
+  const sbyException = el('sbyException');
+
+  document.querySelectorAll('input[name=acclim]').forEach(r=>r.addEventListener('change', ()=>{
+    restBox.classList.toggle('open', document.querySelector('input[name=acclim]:checked').value === 'no');
+    render();
+  }));
+  document.querySelectorAll('input[name=ext]').forEach(r=>r.addEventListener('change', ()=>{
+    const v = document.querySelector('input[name=ext]:checked').value;
+    reliefBox.classList.toggle('open', v==='relief');
+    render();
+  }));
+  document.querySelectorAll('input[name=sby]').forEach(r=>r.addEventListener('change', ()=>{
+    sbyBox.classList.toggle('open', document.querySelector('input[name=sby]:checked').value === 'yes');
+    render();
+  }));
+  [reportTime, sectorsInput, precedingRest, annexOverride, homeBase, plannedEnd,
+   el('reliefHours'), el('reliefType'), sbyBlock, sbyException].forEach(inp=>{
+    inp.addEventListener('input', render);
+    inp.addEventListener('change', render);
+  });
+
+  function render(){
+    const reportMin = timeToMin(reportTime.value);
+    const acclim = document.querySelector('input[name=acclim]:checked').value;
+    const sectors = Math.max(1, Math.min(20, parseInt(sectorsInput.value||'1',10)));
+    const ext = document.querySelector('input[name=ext]:checked').value;
+    const isHomeBase = homeBase.checked;
+
+    if(reportMin===null){
+      el('outBand').textContent='—'; el('outBase').textContent='—';
+      el('outExt').textContent='—'; el('outAllowable').textContent='—';
+      el('outSignoff').textContent='—'; el('statusBox').style.display='none';
+      el('sbyRow1').style.display='none'; el('sbyRow2').style.display='none';
+      el('sbyRow3').style.display='none'; el('sbyRow4').style.display='none';
+      el('ruleNote').textContent=''; drawTimeline(null);
+      el('discretionText').textContent = isHomeBase ? '2:00 (home base departure).' : '3:00 (away from home base).';
+      return;
+    }
+
+    const onStandby = document.querySelector('input[name=sby]:checked').value === 'yes';
+    const sbyExceptionActive = onStandby && sbyException.checked;
+
+    // Validate report time falls within the selected standby block before anything else.
+    if(onStandby && !sbyExceptionActive){
+      const sbyStartCheck = parseInt(sbyBlock.value,10);
+      const rawElapsed = ((reportMin - sbyStartCheck) % 1440 + 1440) % 1440;
+      if(rawElapsed > 720){
+        el('outBand').textContent='—'; el('outBase').textContent='—';
+        el('outExt').textContent='—'; el('outAllowable').textContent='—';
+        el('outSignoff').textContent='—';
+        el('sbyRow1').style.display='none'; el('sbyRow2').style.display='none';
+        el('sbyRow3').style.display='none'; el('sbyRow4').style.display='none';
+        el('ruleNote').textContent='';
+        const sbyBlockLabel = sbyBlock.options[sbyBlock.selectedIndex].text;
+        const statusBox = el('statusBox');
+        statusBox.style.display='flex';
+        statusBox.classList.remove('ok','tight');
+        statusBox.classList.add('bad');
+        el('statusMsg').innerHTML = 'Invalid input — the report time <b>'+reportTime.value+'</b> falls outside the selected standby block ('+sbyBlockLabel+'). Choose a report time within the block, or select the matching standby period.';
+        drawTimeline(null);
+        el('discretionText').textContent = isHomeBase ? '2:00 (home base departure).' : '3:00 (away from home base).';
+        return;
+      }
+    }
+
+    function tableFDPForBand(bandKey){
+      let val, note;
+      if(acclim==='yes'){
+        const idx = Math.min(sectors,8)-1;
+        val = tableA[bandKey][idx] + CABIN_ADD;
+        note = 'Table A (acclimatised) · '+bandRanges.find(b=>b.key===bandKey).label+' band · '+sectors+' sector'+(sectors>1?'s':'')+
+          ' · flight crew base '+minToHM(tableA[bandKey][idx])+' + 1:00 cabin crew allowance.';
+      } else {
+        const restKey = precedingRest.value;
+        const idx = Math.min(sectors,7)-1;
+        val = tableB[restKey][idx] + CABIN_ADD;
+        note = 'Table B (not acclimatised) · preceding rest band: '+
+          (restKey==='upto18orover30' ? 'Up to 18 or Over 30 Hours' : 'Between 18 and 30 Hours') +' · '+sectors+' sector'+(sectors>1?'s':'')+
+          ' · flight crew base '+minToHM(tableB[restKey][idx])+' + 1:00 cabin crew allowance.';
+      }
+      return {val, note};
+    }
+
+    const band = getBand(reportMin);
+    let baseMin, rawTableFDP, ruleNote='';
+    let usingAnnex = false;
+
+    let sbyElapsed = null, sbyCase = null, sbyTotalMin = null, erodedNote = '', sbyStartMin = null;
+
+    if(annexOverride.checked && band.key==='2200-0559' && !onStandby){
+      baseMin = 780; // 13:00 for cabin crew, Annex B.1.1(a)
+      rawTableFDP = 780;
+      usingAnnex = true;
+      ruleNote = 'Using Annex B.1.1(a) special scheme for CMB↔LHR/CDG/FRA layovers: cabin crew max FDP fixed at <b>13:00</b>. In-flight relief on these sectors requires 6 Economy Class seats to be blocked for the resting crew.';
+    } else if(onStandby && !sbyExceptionActive){
+      // Standby start determines the FDP band, unless the report band is MORE limiting
+      sbyStartMin = parseInt(sbyBlock.value,10);
+      const sbyStartBand = getBand(sbyStartMin);
+      const fromStart = tableFDPForBand(sbyStartBand.key);
+      const fromReport = tableFDPForBand(band.key);
+      let tableFDP, whichNote;
+      if(fromReport.val < fromStart.val){
+        tableFDP = fromReport.val; whichNote = 'Report time band is more limiting than the standby start band, so it applies (FOM 8.4.8).';
+      } else {
+        tableFDP = fromStart.val; whichNote = 'Standby start time band determines the allowable FDP (FOM 8.4.8).';
+      }
+
+      sbyElapsed = ((reportMin - sbyStartMin) % 1440 + 1440) % 1440;
+
+      if(sbyElapsed <= 360){
+        sbyCase = 'A';
+        baseMin = tableFDP; // FDP itself is unreduced
+        rawTableFDP = tableFDP;
+        sbyTotalMin = sbyElapsed + tableFDP;
+      } else {
+        sbyCase = 'B';
+        const excess = sbyElapsed - 360;
+        baseMin = Math.max(0, tableFDP - excess); // FDP eroded by standby time worked beyond 6h
+        rawTableFDP = tableFDP;
+        sbyTotalMin = 360 + tableFDP; // collapses to 6h + table FDP
+        erodedNote = ' Standby exceeded 6h by '+minToHM(excess)+', so the flying FDP is reduced by the same amount (Case B, FOM 8.4.8).';
+      }
+      ruleNote = whichNote+' Standby ('+minToTime(sbyStartMin)+' start) elapsed to call-out: <b>'+minToHM(sbyElapsed)+'</b> → Case '+sbyCase+'.'+erodedNote;
+    } else if(onStandby && sbyExceptionActive){
+      const fromReport = tableFDPForBand(band.key);
+      baseMin = fromReport.val;
+      rawTableFDP = fromReport.val;
+      sbyStartMin = parseInt(sbyBlock.value,10);
+      sbyElapsed = ((reportMin - sbyStartMin) % 1440 + 1440) % 1440;
+      ruleNote = 'Standby held at home/accommodation 22:00–08:00 with ≤2h notice: standby start is disregarded, and the allowable FDP is based solely on the report (call-out) time band (FOM 8.4.8). '+fromReport.note;
+    } else {
+      const r = tableFDPForBand(band.key);
+      baseMin = r.val;
+      rawTableFDP = r.val;
+      ruleNote = r.note;
+    }
+
+    // Extension
+    let extMin = 0, extLabel = 'None', extNote='';
+    let cap = null;
+    if(ext==='relief'){
+      const hrs = parseFloat(el('reliefHours').value||'0');
+      const type = el('reliefType').value;
+      if(hrs>=3){
+        if(type==='bunk'){
+          extMin = Math.round(hrs*60/2);
+          cap = 1140; // 19:00 cabin crew cap
+          extLabel = '+'+minToHM(extMin)+' (bunk rest)';
+        } else {
+          extMin = Math.round(hrs*60/3);
+          cap = 960; // 16:00 cabin crew cap
+          extLabel = '+'+minToHM(extMin)+' (seat rest)';
+        }
+      } else {
+        extLabel = 'Not eligible (<3h in-flight rest)';
+      }
+    }
+
+    let allowableMin = baseMin + extMin;
+    if(cap && allowableMin>cap){ allowableMin = cap; extNote = ' (capped)'; }
+
+    el('outBand').textContent = usingAnnex ? 'Annex B.1.1(a) override' : (onStandby && !sbyExceptionActive ? 'See note below' : band.label);
+    el('outBase').textContent = minToHM(rawTableFDP);
+    el('outExt').textContent = extLabel + extNote;
+    el('outAllowable').textContent = minToHM(allowableMin);
+
+    const signoffMin = reportMin + allowableMin;
+    el('outSignoff').textContent = minToTime(signoffMin) + (signoffMin>=1440 ? ' (+1 day)' : '');
+
+    // Standby-specific rows
+    const showSby = onStandby && !sbyExceptionActive && sbyCase !== null;
+    el('sbyRow1').style.display = showSby ? 'flex' : 'none';
+    el('sbyRow2').style.display = showSby ? 'flex' : 'none';
+    el('sbyRow3').style.display = (showSby && sbyCase==='B') ? 'flex' : 'none';
+    el('sbyRow4').style.display = showSby ? 'flex' : 'none';
+    if(showSby){
+      el('outSbyElapsed').textContent = minToHM(sbyElapsed);
+      el('outSbyCase').textContent = 'Case '+sbyCase+(sbyCase==='A' ? ' (≤6h — no erosion)' : ' (>6h — FDP eroded)');
+      el('outSbyErosion').textContent = minToHM(baseMin);
+      el('outSbyTotal').textContent = minToHM(sbyTotalMin)+' (max 12:00 standby + table FDP)';
+    }
+
+    el('ruleNote').innerHTML = ruleNote;
+
+    // discretion reference
+    el('discretionText').textContent = isHomeBase ? '2:00 (home base departure).' : '3:00 (away from home base).';
+
+    // Planned duty comparison
+    const plannedMin = timeToMin(plannedEnd.value);
+    const statusBox = el('statusBox'), statusMsg = el('statusMsg');
+    let plannedStatus = null;
+    if(plannedMin===null){
+      statusBox.style.display='none';
+    } else {
+      let plannedFDP = plannedMin - reportMin;
+      if(plannedFDP<0) plannedFDP += 1440;
+      const margin = allowableMin - plannedFDP;
+      statusBox.style.display='flex';
+      statusBox.classList.remove('ok','tight','bad');
+      if(margin<0){
+        statusBox.classList.add('bad'); plannedStatus='bad';
+        statusMsg.innerHTML = 'Planned FDP is <b>'+minToHM(plannedFDP)+'</b> — exceeds the allowable limit by <b>'+minToHM(Math.abs(margin))+'</b>.';
+      } else if(margin<=30){
+        statusBox.classList.add('tight'); plannedStatus='tight';
+        statusMsg.innerHTML = 'Planned FDP is <b>'+minToHM(plannedFDP)+'</b> — within limit, but margin is only <b>'+minToHM(margin)+'</b>.';
+      } else {
+        statusBox.classList.add('ok'); plannedStatus='ok';
+        statusMsg.innerHTML = 'Planned FDP is <b>'+minToHM(plannedFDP)+'</b> — compliant, margin <b>'+minToHM(margin)+'</b>.';
+      }
+    }
+
+    drawTimeline({
+      reportMin, onStandby, sbyExceptionActive, sbyStartMin, sbyElapsed,
+      baseMin, extMin, allowableMin, plannedMin, plannedStatus
+    });
+  }
+
+  // ---------- Signature element: duty timeline bar ----------
+  const COL_SBY = '#7c8cff';
+  const COL_FDP = '#3ddc97';
+  const COL_EXT = '#4fd1e0';
+  const COL_STATUS = { ok:'#3ddc97', tight:'#f5a623', bad:'#ff5c66' };
+
+  function niceStep(totalMin){
+    const steps = [30,60,90,120,180,240,360,480];
+    for(const s of steps){ if(totalMin/s <= 10) return s; }
+    return 480;
+  }
+
+  function drawTimeline(data){
+    const svg = el('timeline');
+    const legend = el('timelineLegend');
+    const W = 760, H = 168;
+    const padL = 14, padR = 14, trackY = 70, trackH = 34;
+    const usableW = W - padL - padR;
+
+    if(!data || data.reportMin===null){
+      svg.innerHTML = `<rect x="0" y="${trackY}" width="${W}" height="${trackH}" rx="8" fill="#141c28"/>
+        <text x="${W/2}" y="${trackY+trackH/2+4}" text-anchor="middle" class="tl-placeholder">Enter a report time to see the duty timeline</text>`;
+      legend.innerHTML = '';
+      return;
+    }
+
+    const { reportMin, onStandby, sbyExceptionActive, sbyStartMin, sbyElapsed,
+            baseMin, extMin, allowableMin, plannedMin, plannedStatus } = data;
+
+    const showSbySeg = onStandby && sbyStartMin!==null && sbyElapsed!==null;
+    const reportElapsed = showSbySeg ? sbyElapsed : 0;
+    const t0 = showSbySeg ? sbyStartMin : reportMin;
+
+    const baseEnd = reportElapsed + baseMin;
+    const extEnd = baseEnd + extMin;
+
+    let plannedElapsed = null;
+    if(plannedMin!==null){
+      plannedElapsed = reportElapsed + (((plannedMin - reportMin) % 1440 + 1440) % 1440);
+    }
+
+    let totalSpan = Math.max(extEnd, plannedElapsed||0);
+    const step = niceStep(totalSpan);
+    totalSpan = Math.ceil((totalSpan + step*0.4) / step) * step; // padding + round to a clean tick
+
+    const px = (m) => padL + (m/totalSpan)*usableW;
+    const clockAt = (m) => minToTime(t0 + m);
+
+    let html = '';
+
+    // base track
+    html += `<rect x="${padL}" y="${trackY}" width="${usableW}" height="${trackH}" rx="8" fill="#141c28"/>`;
+
+    // hour gridlines
+    for(let m=0; m<=totalSpan; m+=step){
+      const x = px(m);
+      html += `<line x1="${x}" y1="${trackY-6}" x2="${x}" y2="${trackY+trackH+6}" stroke="#1c2632" stroke-width="1"/>`;
+      html += `<text x="${x}" y="${trackY+trackH+20}" text-anchor="middle" class="tl-tick-label">${clockAt(m)}</text>`;
+    }
+
+    // standby segment
+    if(showSbySeg && sbyElapsed>0){
+      const x1=px(0), x2=px(reportElapsed);
+      html += `<rect x="${x1}" y="${trackY}" width="${x2-x1}" height="${trackH}" fill="${COL_SBY}" opacity="0.85" rx="6"/>`;
+      if(x2-x1>40) html += `<text x="${(x1+x2)/2}" y="${trackY+trackH/2+4}" text-anchor="middle" class="tl-seg-label">SBY</text>`;
+    }
+
+    // FDP base segment
+    {
+      const x1=px(reportElapsed), x2=px(baseEnd);
+      html += `<rect x="${x1}" y="${trackY}" width="${Math.max(x2-x1,2)}" height="${trackH}" fill="${COL_FDP}" rx="6"/>`;
+      if(x2-x1>36) html += `<text x="${(x1+x2)/2}" y="${trackY+trackH/2+4}" text-anchor="middle" class="tl-seg-label">FDP</text>`;
+    }
+
+    // extension segment
+    if(extMin>0){
+      const x1=px(baseEnd), x2=px(extEnd);
+      html += `<rect x="${x1}" y="${trackY}" width="${Math.max(x2-x1,2)}" height="${trackH}" fill="${COL_EXT}" rx="6"/>`;
+      if(x2-x1>36) html += `<text x="${(x1+x2)/2}" y="${trackY+trackH/2+4}" text-anchor="middle" class="tl-seg-label">REST</text>`;
+    }
+
+
+    // report / call-out marker
+    {
+      const x = px(reportElapsed);
+      html += markerLine(x, trackY, trackH, '#e8edf4');
+      html += `<text x="${x}" y="${trackY-12}" text-anchor="middle" class="tl-marker-label">${clockAt(reportElapsed)}</text>`;
+      html += `<text x="${x}" y="${trackY-24}" text-anchor="middle" class="tl-marker-sub">${onStandby ? (sbyExceptionActive ? 'CALL-OUT*' : 'CALL-OUT') : 'REPORT'}</text>`;
+    }
+
+    // sign-off marker
+    {
+      const x = px(extEnd);
+      html += markerLine(x, trackY, trackH, '#e8edf4');
+      html += `<text x="${x}" y="${trackY+trackH+38}" text-anchor="middle" class="tl-marker-label">${clockAt(extEnd)}</text>`;
+      html += `<text x="${x}" y="${trackY+trackH+50}" text-anchor="middle" class="tl-marker-sub">SIGN-OFF</text>`;
+    }
+
+    // planned duty marker (diamond)
+    if(plannedElapsed!==null){
+      const x = px(plannedElapsed);
+      const col = COL_STATUS[plannedStatus] || '#e8edf4';
+      html += `<line x1="${x}" y1="${trackY-2}" x2="${x}" y2="${trackY+trackH+2}" stroke="${col}" stroke-width="2.5" stroke-dasharray="3,3"/>`;
+      html += `<polygon points="${x-6},${trackY-14} ${x},${trackY-22} ${x+6},${trackY-14} ${x},${trackY-6}" fill="${col}"/>`;
+      html += `<text x="${x}" y="${trackY+trackH+38}" text-anchor="middle" class="tl-marker-label" fill="${col}">${clockAt(plannedElapsed)}</text>`;
+      html += `<text x="${x}" y="${trackY+trackH+50}" text-anchor="middle" class="tl-marker-sub">PLANNED</text>`;
+    }
+
+    svg.innerHTML = html;
+
+    // legend
+    let lg = `<div class="lg"><span class="sw" style="background:${COL_FDP}"></span>Allowable FDP</div>`;
+    if(extMin>0) lg += `<div class="lg"><span class="sw" style="background:${COL_EXT}"></span>Extension (in-flight relief)</div>`;
+    if(showSbySeg && sbyElapsed>0) lg += `<div class="lg"><span class="sw" style="background:${COL_SBY}"></span>Standby (elapsed)</div>`;
+    if(plannedElapsed!==null) lg += `<div class="lg"><span class="sw" style="background:${COL_STATUS[plannedStatus]}"></span>Planned duty</div>`;
+    if(showSbySeg && sbyExceptionActive) lg += `<div class="lg">* standby start disregarded (FOM 8.4.8 exception)</div>`;
+    legend.innerHTML = lg;
+  }
+
+  function markerLine(x, trackY, trackH, color){
+    return `<line x1="${x}" y1="${trackY-6}" x2="${x}" y2="${trackY+trackH+6}" stroke="${color}" stroke-width="2"/>
+      <circle cx="${x}" cy="${trackY-6}" r="3.5" fill="${color}"/>`;
+  }
+
+  render();
+})();
+</script>
+
+<script>
+  // --- PWA install prompt (Chrome/Edge/Android) ---
+  let deferredPrompt = null;
+  const installBtn = document.getElementById('installBtn');
+  const iosHint = document.getElementById('iosHint');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.classList.add('show');
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if(!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBtn.classList.remove('show');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installBtn.classList.remove('show');
+  });
+
+  // Already running standalone? hide install UI entirely.
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+
+  // iOS Safari never fires beforeinstallprompt — show manual instructions instead.
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  if(isIOS && !isStandalone){
+    iosHint.classList.add('show');
+  }
+  if(isStandalone){
+    installBtn.classList.remove('show');
+    iosHint.classList.remove('show');
+  }
+
+  // --- Service worker registration ---
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {
+        // Registration can fail if served over file:// or without HTTPS —
+        // the calculator still works fully, it just won't cache for offline use.
+      });
+    });
+  }
+</script>
+</body>
+</html>
