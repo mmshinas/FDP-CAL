@@ -844,7 +844,7 @@
     let usingAnnex = false;
 
     const annexDest = findDestination(destination.value);
-    const annexEligible = (!onStandby && band.key==='2200-0559') ||
+    const annexEligible = (!onStandby && band.key==='2200-0559') &&
       (annexDest && ['LHR','CDG','FRA'].includes(annexDest.iata));
     el('routeVariationFieldset').style.display = annexEligible ? 'block' : 'none';
     if(!annexEligible && annexOverride.checked){ annexOverride.checked = false; }
