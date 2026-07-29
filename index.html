@@ -284,6 +284,12 @@
     margin-top:10px;font-family:var(--mono);font-size:13.5px;color:var(--dim);
   }
   .verdict-sub b{color:var(--text);font-weight:700;}
+  #outChocksOffRow{font-size:19px;}
+  #outChocksOff{font-size:19px;color:var(--red);font-weight:800;letter-spacing:.02em;animation:flashRed 1s steps(1) infinite;}
+  @keyframes flashRed{
+    0%, 49%{opacity:1;}
+    50%, 100%{opacity:0.25;}
+  }
   .verdict-landing{
     margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);
   }
@@ -348,7 +354,7 @@
 
   footer{
     max-width:1180px;margin:44px auto 0;padding:22px 24px 0;border-top:1px solid var(--line);
-    color:var(--dimmer);font-size:11.5px;line-height:1.7;
+    color:var(--dimmer);font-size:11.5px;line-height:1.7;text-align:center;
   }
 </style>
 </head>
@@ -409,7 +415,6 @@
                 <option value="0">00:00 – 12:00</option>
               </select>
             </label>
-            <div class="hint">Standby is capped at 12 hours in all cases. The report time is treated as the moment of reporting from standby.</div>
           </div>
           <div>
             <label class="field" style="margin-bottom:6px;">
@@ -438,7 +443,6 @@
                 <option value="">Select destination…</option>
               </select>
             </label>
-            <div class="hint">Shows the latest legal sign-off time converted into this station's local time.</div>
           </div>
           <div>
             <label class="field" style="margin-bottom:6px;">
@@ -454,7 +458,6 @@
                 <option value="8">8</option>
               </select>
             </label>
-            <div class="hint">8 sectors uses the final column of the table.</div>
           </div>
         </div>
       </fieldset>
@@ -472,7 +475,6 @@
           </label>
         </div>
         <button type="button" id="clearPlannedBtn" class="clearBtn">Clear</button>
-        <div class="hint" id="plannedEndHint">Enter your expected departure time and total flying time — the tool works out the expected landing and checks it against the calculated allowance.</div>
         <div class="hint" id="expectedLandingLine" style="display:none;"></div>
         <div class="status bad" id="minTurnaroundWarning" style="display:none;margin-top:12px;">
           <div class="sw"></div>
@@ -524,7 +526,7 @@
             <option value="3">3:00</option>
           </select>
         </label>
-        <div class="hint">If selected, this is added directly to the Allowable FDP above. Requires a Discretion Report and applies only to unforeseen circumstances, not for planning.</div>
+        <div class="hint">If selected, this is added directly to the Allowable FDP below. Requires a Discretion Report and applies only to unforeseen circumstances, not for planning.</div>
       </fieldset>
     </div>
 
@@ -540,8 +542,6 @@
           <div class="sw"></div>
           <div class="msg" id="chocksOffWarningMsg"></div>
         </div>
-        <div class="verdict-sub" id="outSignoffRow">Should Land by: <b id="outSignoff">—</b></div>
-        <div class="verdict-sub" id="outSignoffDestRow" style="display:none;">Should Land by (<span id="outDestLabel"></span> local time): <b id="outSignoffDest">—</b></div>
         <div class="verdict-landing" id="verdictLandingRow" style="display:none;">
           <div class="verdict-landing-label">Expected landing — <span id="landingDestLabel"></span> local time</div>
           <div class="verdict-landing-value" id="landingDestValue">—</div>
@@ -574,7 +574,8 @@
   </div>
 
   <footer>
-    Based on SriLankan Airlines FOM Part A, Chapter 8 (Flight Time, Flight Duty Periods, Duty Periods and Rest Periods for Fatigue Management) and Annex A/B, cabin crew provisions. This tool is a planning aid for quick reference only — it does not replace the FOM, the published roster, or sign-off from Crew Scheduling. Always verify against the current controlled revision of the FOM before relying on any figure shown here.
+    <div style="color:#fff;">Developed By</div>
+    <div style="font-size:17px;color:yellow;font-weight:700;">SHINAS MANSOOR</div>
   </footer>
 </div>
 
@@ -780,7 +781,7 @@
     if(reportMin===null){
       el('outBand').textContent='—'; el('outBase').textContent='—';
       el('outExt').textContent='—'; el('outAllowable').textContent='—';
-      el('outSignoff').textContent='—'; el('statusBox').style.display='none';
+      el('statusBox').style.display='none';
       el('verdictBox').classList.remove('status-ok','status-tight','status-bad');
       el('clearPlannedBtn').classList.toggle('show', departureTime.value !== '' || flyingTime.value !== '');
       el('sbyRow1').style.display='none'; el('sbyRow2').style.display='none';
@@ -809,7 +810,6 @@
       if(rawElapsed > 720){
         el('outBand').textContent='—'; el('outBase').textContent='—';
         el('outExt').textContent='—'; el('outAllowable').textContent='—';
-        el('outSignoff').textContent='—';
         el('clearPlannedBtn').classList.toggle('show', departureTime.value !== '' || flyingTime.value !== '');
         el('sbyRow1').style.display='none'; el('sbyRow2').style.display='none';
         el('sbyRow3').style.display='none'; el('sbyRow4').style.display='none';
@@ -948,9 +948,7 @@
     el('outAllowable').textContent = minToHM(allowableMin);
 
     const signoffMin = reportMin + allowableMin;
-    el('outSignoff').textContent = minToTime(signoffMin) + (signoffMin>=1440 ? ' (+1 day)' : '');
 
-    const destRow = el('outSignoffDestRow');
     const dest = findDestination(destination.value);
     let destOffsetDiff = 0;
     if(dest){
@@ -958,14 +956,6 @@
       const slOffset = tzOffsetMinutes('Asia/Colombo', now);
       const destOffset = tzOffsetMinutes(dest.tz, now);
       destOffsetDiff = destOffset - slOffset;
-      const destSignoffMin = signoffMin + destOffsetDiff;
-      el('outSignoffRow').style.display = 'none';
-      destRow.style.display = 'block';
-      el('outDestLabel').textContent = dest.iata + ' ' + dest.city;
-      el('outSignoffDest').textContent = minToTime(destSignoffMin) + dayLabel(Math.floor(destSignoffMin/1440));
-    } else {
-      el('outSignoffRow').style.display = 'block';
-      destRow.style.display = 'none';
     }
 
     // Should Depart by: the latest departure time that lands (chocks on) exactly at the
