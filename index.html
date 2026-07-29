@@ -460,7 +460,7 @@
       </fieldset>
 
       <fieldset>
-        <legend>Delayed Departure (Optional)</legend>
+        <legend>Departure Information</legend>
         <div class="time-pair">
           <label class="field" style="margin-bottom:0;">
             <span class="lbl">Departure (local)</span>
@@ -474,6 +474,10 @@
         <button type="button" id="clearPlannedBtn" class="clearBtn">Clear</button>
         <div class="hint" id="plannedEndHint">Enter your expected departure time and total flying time — the tool works out the expected landing and checks it against the calculated allowance.</div>
         <div class="hint" id="expectedLandingLine" style="display:none;"></div>
+        <div class="status bad" id="minTurnaroundWarning" style="display:none;margin-top:12px;">
+          <div class="sw"></div>
+          <div class="msg" id="minTurnaroundMsg"></div>
+        </div>
       </fieldset>
 
       <fieldset id="routeVariationFieldset">
@@ -531,18 +535,18 @@
       <div class="verdict" id="verdictBox">
         <div class="verdict-label">Allowable FDP (from reporting)</div>
         <div class="verdict-value" id="outAllowable">—</div>
-        <div class="verdict-sub">Latest Chocks On : <b id="outSignoff">—</b></div>
-        <div class="verdict-sub" id="outSignoffDestRow" style="display:none;">Latest Chocks On (<span id="outDestLabel"></span> local time): <b id="outSignoffDest">—</b></div>
+        <div class="verdict-sub" id="outChocksOffRow" style="display:none;">Should Depart by : <b id="outChocksOff">—</b></div>
+        <div class="status bad" id="chocksOffWarning" style="display:none;margin-top:10px;">
+          <div class="sw"></div>
+          <div class="msg" id="chocksOffWarningMsg"></div>
+        </div>
+        <div class="verdict-sub" id="outSignoffRow">Should Land by: <b id="outSignoff">—</b></div>
+        <div class="verdict-sub" id="outSignoffDestRow" style="display:none;">Should Land by (<span id="outDestLabel"></span> local time): <b id="outSignoffDest">—</b></div>
         <div class="verdict-landing" id="verdictLandingRow" style="display:none;">
           <div class="verdict-landing-label">Expected landing — <span id="landingDestLabel"></span> local time</div>
           <div class="verdict-landing-value" id="landingDestValue">—</div>
         </div>
       </div>
-
-      <div class="clockwrap">
-        <svg id="timeline" viewBox="0 0 760 168"></svg>
-      </div>
-      <div class="timelineLegend" id="timelineLegend"></div>
 
       <div class="readout">
         <div class="rline"><span class="k">Time band</span><span class="v" id="outBand">—</span></div>
@@ -670,6 +674,8 @@
     return ' (' + (days>0 ? '+' : '\u2212') + abs + ' ' + noun + ')';
   }
 
+  const MIN_TURNAROUND_MIN = 80; // 1:20 — mandatory minimum from reporting to departure/chocks-off
+
   function timeToMin(str){
     if(!str) return null;
     const [h,m] = str.split(':').map(Number);
@@ -783,6 +789,9 @@
       updateDiscretionNote();
       el('expectedLandingLine').style.display='none';
       el('verdictLandingRow').style.display='none';
+      el('outChocksOffRow').style.display='none';
+      el('chocksOffWarning').style.display='none';
+      el('minTurnaroundWarning').style.display='none';
       return;
     }
 
@@ -817,6 +826,9 @@
         updateDiscretionNote();
         el('expectedLandingLine').style.display='none';
         el('verdictLandingRow').style.display='none';
+        el('outChocksOffRow').style.display='none';
+        el('chocksOffWarning').style.display='none';
+        el('minTurnaroundWarning').style.display='none';
         return;
       }
     }
@@ -947,11 +959,36 @@
       const destOffset = tzOffsetMinutes(dest.tz, now);
       destOffsetDiff = destOffset - slOffset;
       const destSignoffMin = signoffMin + destOffsetDiff;
+      el('outSignoffRow').style.display = 'none';
       destRow.style.display = 'block';
       el('outDestLabel').textContent = dest.iata + ' ' + dest.city;
       el('outSignoffDest').textContent = minToTime(destSignoffMin) + dayLabel(Math.floor(destSignoffMin/1440));
     } else {
+      el('outSignoffRow').style.display = 'block';
       destRow.style.display = 'none';
+    }
+
+    // Should Depart by: the latest departure time that lands (chocks on) exactly at the
+    // allowable FDP sign-off, given the entered flying time — Should Land by minus flying
+    // time. Shown in local (Sri Lanka) time only. Requires flying time to compute.
+    const chocksOffFlyMin = timeToMin(flyingTime.value);
+    const chocksOffRow = el('outChocksOffRow');
+    const chocksOffWarn = el('chocksOffWarning');
+    if(chocksOffFlyMin !== null){
+      const chocksOffRaw = signoffMin - chocksOffFlyMin;
+      chocksOffRow.style.display = 'block';
+      el('outChocksOff').textContent = minToTime(chocksOffRaw) + dayLabel(Math.floor(chocksOffRaw/1440));
+
+      const requiredMin = MIN_TURNAROUND_MIN + chocksOffFlyMin; // mandatory turnaround + flying time
+      if(requiredMin > allowableMin){
+        chocksOffWarn.style.display = 'flex';
+        el('chocksOffWarningMsg').innerHTML = 'Departing at the mandatory <b>1:20</b> minimum plus the flying time needs <b>'+minToHM(requiredMin)+'</b>, but the Allowable FDP is only <b>'+minToHM(allowableMin)+'</b> — landing would fall beyond Should Land by. The FDP needs to be extended (e.g. Commander\u2019s discretion or in-flight relief).';
+      } else {
+        chocksOffWarn.style.display = 'none';
+      }
+    } else {
+      chocksOffRow.style.display = 'none';
+      chocksOffWarn.style.display = 'none';
     }
 
     // Standby-specific rows
@@ -974,6 +1011,18 @@
     const flyMin = timeToMin(flyingTime.value);
     const landingLine = el('expectedLandingLine');
     const verdictLandingRow = el('verdictLandingRow');
+    const turnaroundWarn = el('minTurnaroundWarning');
+    if(depMin !== null){
+      const depGap = ((depMin - reportMin) % 1440 + 1440) % 1440;
+      if(depGap < MIN_TURNAROUND_MIN){
+        turnaroundWarn.style.display = 'flex';
+        el('minTurnaroundMsg').innerHTML = 'Departure is only <b>'+minToHM(depGap)+'</b> after reporting — less than the mandatory <b>1:20</b> minimum from reporting to departure.';
+      } else {
+        turnaroundWarn.style.display = 'none';
+      }
+    } else {
+      turnaroundWarn.style.display = 'none';
+    }
     let plannedMin = null;
     if(depMin!==null && flyMin!==null){
       const totalRaw = depMin + flyMin;
@@ -1054,6 +1103,8 @@
   }
 
   function drawTimeline(data){
+    return; // Duty timeline chart removed — was too small to read reliably.
+    /* eslint-disable no-unreachable */
     const svg = el('timeline');
     const legend = el('timelineLegend');
     const W = 760, H = 168;
