@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fdp-line-v49';
+const CACHE_NAME = 'fdp-line-v52';
 const APP_SHELL = [
   './',
   './index.html',

@@ -286,6 +286,7 @@
   .verdict-sub b{color:var(--text);font-weight:700;}
   #outChocksOffRow{font-size:19px;}
   #outChocksOff{font-size:19px;color:var(--red);font-weight:800;letter-spacing:.02em;animation:flashRed 1s steps(1) infinite;}
+  #outSignoffNoFlyTime{font-size:19px;color:var(--red);font-weight:800;letter-spacing:.02em;animation:flashRed 1s steps(1) infinite;}
   @keyframes flashRed{
     0%, 49%{opacity:1;}
     50%, 100%{opacity:0.25;}
@@ -538,6 +539,10 @@
         <div class="verdict-label">Allowable FDP (from reporting)</div>
         <div class="verdict-value" id="outAllowable">—</div>
         <div class="verdict-sub" id="outChocksOffRow" style="display:none;">Should Depart by : <b id="outChocksOff">—</b></div>
+        <div class="verdict-sub" id="outSignoffNoFlyRow" style="display:none;font-size:15px;text-align:center;">
+          <div>Should Land by : <b id="outSignoffNoFlyTime">—</b><span id="outSignoffNoFlyDay"></span></div>
+          <div id="outSignoffNoFlySuffix"></div>
+        </div>
         <div class="status bad" id="chocksOffWarning" style="display:none;margin-top:10px;">
           <div class="sw"></div>
           <div class="msg" id="chocksOffWarningMsg"></div>
@@ -791,6 +796,7 @@
       el('expectedLandingLine').style.display='none';
       el('verdictLandingRow').style.display='none';
       el('outChocksOffRow').style.display='none';
+      el('outSignoffNoFlyRow').style.display='none';
       el('chocksOffWarning').style.display='none';
       el('minTurnaroundWarning').style.display='none';
       return;
@@ -827,6 +833,7 @@
         el('expectedLandingLine').style.display='none';
         el('verdictLandingRow').style.display='none';
         el('outChocksOffRow').style.display='none';
+        el('outSignoffNoFlyRow').style.display='none';
         el('chocksOffWarning').style.display='none';
         el('minTurnaroundWarning').style.display='none';
         return;
@@ -956,6 +963,19 @@
       const slOffset = tzOffsetMinutes('Asia/Colombo', now);
       const destOffset = tzOffsetMinutes(dest.tz, now);
       destOffsetDiff = destOffset - slOffset;
+    }
+
+    // Special case: destination selected but flying time not entered — show Should Land
+    // by in the destination's local time, since Should Depart by can't be calculated yet.
+    const noFlyRow = el('outSignoffNoFlyRow');
+    if(dest && timeToMin(flyingTime.value) === null){
+      const destSignoffMin = signoffMin + destOffsetDiff;
+      noFlyRow.style.display = 'block';
+      el('outSignoffNoFlyTime').textContent = minToTime(destSignoffMin);
+      el('outSignoffNoFlyDay').textContent = dayLabel(Math.floor(destSignoffMin/1440));
+      el('outSignoffNoFlySuffix').textContent = '(' + dest.iata + ' ' + dest.city + ' local time)';
+    } else {
+      noFlyRow.style.display = 'none';
     }
 
     // Should Depart by: the latest departure time that lands (chocks on) exactly at the
