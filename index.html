@@ -178,6 +178,11 @@
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   @media(max-width:520px){ .row2{grid-template-columns:1fr;} }
   .time-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .triple-pair{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .triple-pair .lbl{font-size:12px;}
+  .triple-pair input[type=time], .triple-pair select{
+    font-size:13px;padding:13px 6px;
+  }
 
   .radiogroup{display:flex;gap:10px;flex-wrap:wrap;}
   .radiogroup label{
@@ -435,8 +440,16 @@
       </fieldset>
 
       <fieldset>
-        <legend>Destination &amp; Sectors</legend>
+        <legend>Departure &amp; Arrival Stations</legend>
         <div class="time-pair">
+          <div>
+            <label class="field" style="margin-bottom:6px;">
+              <span class="lbl">Departure station</span>
+              <select id="departureStation">
+                <option value="">Select departure…</option>
+              </select>
+            </label>
+          </div>
           <div>
             <label class="field" style="margin-bottom:6px;">
               <span class="lbl">Arrival station</span>
@@ -445,33 +458,31 @@
               </select>
             </label>
           </div>
-          <div>
-            <label class="field" style="margin-bottom:6px;">
-              <span class="lbl">Sectors</span>
-              <select id="sectors">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-              </select>
-            </label>
-          </div>
         </div>
       </fieldset>
 
       <fieldset>
         <legend>Departure Information</legend>
-        <div class="time-pair">
+        <div class="triple-pair">
           <label class="field" style="margin-bottom:0;">
-            <span class="lbl">Departure (local)</span>
+            <span class="lbl">Departure</span>
             <input type="time" id="departureTime">
           </label>
           <label class="field" style="margin-bottom:0;">
-            <span class="lbl">Flying time (hh:mm)</span>
+            <span class="lbl">Sectors</span>
+            <select id="sectors">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+          <label class="field" style="margin-bottom:0;">
+            <span class="lbl">Flying (hh:mm)</span>
             <input type="time" id="flyingTime">
           </label>
         </div>
@@ -726,12 +737,16 @@
   const sbyBlock = el('sbyBlock');
   const sbyException = el('sbyException');
   const destination = el('destination');
+  const departureStation = el('departureStation');
 
-  destination.insertAdjacentHTML('beforeend', DESTINATIONS
+  const destOptionsHTML = DESTINATIONS
     .slice()
     .sort((a,b) => a.city.localeCompare(b.city))
     .map(d => '<option value="'+d.iata+'">'+d.city+' ('+d.iata+')</option>')
-    .join(''));
+    .join('');
+  destination.insertAdjacentHTML('beforeend', destOptionsHTML);
+  departureStation.insertAdjacentHTML('beforeend', destOptionsHTML);
+  departureStation.value = 'CMB'; // default: home base, matches the app's existing baseline assumption
 
   document.querySelectorAll('input[name=acclim]').forEach(r=>r.addEventListener('change', ()=>{
     restBox.classList.toggle('open', document.querySelector('input[name=acclim]:checked').value === 'no');
@@ -755,7 +770,7 @@
     render();
   });
   [reportTime, sectorsInput, precedingRest, annexOverride, discretionHours, departureTime, flyingTime,
-   el('reliefHours'), el('reliefType'), sbyException, destination].forEach(inp=>{
+   el('reliefHours'), el('reliefType'), sbyException, destination, departureStation].forEach(inp=>{
     inp.addEventListener('input', render);
     inp.addEventListener('change', render);
   });
@@ -956,13 +971,19 @@
 
     const signoffMin = reportMin + allowableMin;
 
+    // Origin (departure) station — defaults to Colombo when not set, since that's the
+    // app's home base. All local-time conversions are relative to this station now,
+    // not hardcoded to Sri Lanka, since crew may report/depart from any station.
+    const originStation = findDestination(departureStation.value) || DESTINATIONS.find(d => d.iata === 'CMB');
+    const originTz = originStation.tz;
+
     const dest = findDestination(destination.value);
     let destOffsetDiff = 0;
     if(dest){
       const now = new Date();
-      const slOffset = tzOffsetMinutes('Asia/Colombo', now);
+      const originOffset = tzOffsetMinutes(originTz, now);
       const destOffset = tzOffsetMinutes(dest.tz, now);
-      destOffsetDiff = destOffset - slOffset;
+      destOffsetDiff = destOffset - originOffset;
     }
 
     // Special case: destination selected but flying time not entered — show Should Land
@@ -978,9 +999,13 @@
       noFlyRow.style.display = 'none';
     }
 
+    // Mandatory reporting-to-departure minimum: 1:20 by default (Colombo/home base),
+    // reduced to 1:00 when departing from any station other than Colombo.
+    const effectiveMinTurnaround = (originStation.iata !== 'CMB') ? 60 : MIN_TURNAROUND_MIN;
+
     // Should Depart by: the latest departure time that lands (chocks on) exactly at the
     // allowable FDP sign-off, given the entered flying time — Should Land by minus flying
-    // time. Shown in local (Sri Lanka) time only. Requires flying time to compute.
+    // time. Shown in the origin (departure) station's local time. Requires flying time to compute.
     const chocksOffFlyMin = timeToMin(flyingTime.value);
     const chocksOffRow = el('outChocksOffRow');
     const chocksOffWarn = el('chocksOffWarning');
@@ -989,10 +1014,10 @@
       chocksOffRow.style.display = 'block';
       el('outChocksOff').textContent = minToTime(chocksOffRaw) + dayLabel(Math.floor(chocksOffRaw/1440));
 
-      const requiredMin = MIN_TURNAROUND_MIN + chocksOffFlyMin; // mandatory turnaround + flying time
+      const requiredMin = effectiveMinTurnaround + chocksOffFlyMin; // mandatory turnaround + flying time
       if(requiredMin > allowableMin){
         chocksOffWarn.style.display = 'flex';
-        el('chocksOffWarningMsg').innerHTML = 'Departing at the mandatory <b>1:20</b> minimum plus the flying time needs <b>'+minToHM(requiredMin)+'</b>, but the Allowable FDP is only <b>'+minToHM(allowableMin)+'</b> — landing would fall beyond Should Land by. The FDP needs to be extended (e.g. Commander\u2019s discretion or in-flight relief).';
+        el('chocksOffWarningMsg').innerHTML = 'Departing at the mandatory <b>'+minToHM(effectiveMinTurnaround)+'</b> minimum plus the flying time needs <b>'+minToHM(requiredMin)+'</b>, but the Allowable FDP is only <b>'+minToHM(allowableMin)+'</b> — landing would fall beyond Should Land by. The FDP needs to be extended (e.g. Commander\u2019s discretion or in-flight relief).';
       } else {
         chocksOffWarn.style.display = 'none';
       }
@@ -1024,9 +1049,9 @@
     const turnaroundWarn = el('minTurnaroundWarning');
     if(depMin !== null){
       const depGap = ((depMin - reportMin) % 1440 + 1440) % 1440;
-      if(depGap < MIN_TURNAROUND_MIN){
+      if(depGap < effectiveMinTurnaround){
         turnaroundWarn.style.display = 'flex';
-        el('minTurnaroundMsg').innerHTML = 'Departure is only <b>'+minToHM(depGap)+'</b> after reporting — less than the mandatory <b>1:20</b> minimum from reporting to departure.';
+        el('minTurnaroundMsg').innerHTML = 'Departure is only <b>'+minToHM(depGap)+'</b> after reporting — less than the mandatory <b>'+minToHM(effectiveMinTurnaround)+'</b> minimum from reporting to departure.';
       } else {
         turnaroundWarn.style.display = 'none';
       }
@@ -1038,7 +1063,7 @@
       const totalRaw = depMin + flyMin;
       plannedMin = ((totalRaw % 1440) + 1440) % 1440;
       landingLine.style.display = 'block';
-      landingLine.textContent = 'Expected landing (calculated, Sri Lanka time): ' + minToTime(totalRaw) + dayLabel(Math.floor(totalRaw/1440));
+      landingLine.textContent = 'Expected landing (calculated, ' + originStation.city + ' local time): ' + minToTime(totalRaw) + dayLabel(Math.floor(totalRaw/1440));
       if(dest){
         const destTotalRaw = totalRaw + destOffsetDiff;
         verdictLandingRow.style.display = 'block';
@@ -1254,6 +1279,7 @@
     departureTime.value = '';
     flyingTime.value = '';
     destination.value = '';
+    departureStation.value = 'CMB';
 
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
